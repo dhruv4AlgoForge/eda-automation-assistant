@@ -15,7 +15,7 @@ load_dotenv(Path(__file__).parent / ".env")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 if not COHERE_API_KEY:
     raise ValueError("COHERE_API_KEY not found in .env file")
-co = cohere.Client(COHERE_API_KEY)
+co = cohere.ClientV2(COHERE_API_KEY)
 
 # --- Utils ---
 def save_and_send(fig, title, name):
@@ -88,14 +88,14 @@ def plot_timeseries(df):
     """Generate simple time-series plots."""
     datetime_cols = list(df.select_dtypes(include="datetime64").columns)
 
-    if not datetime_cols:  # ✅ Correct check for empty list
+    if not datetime_cols:
         for col in df.columns:
             if pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower():
                 df[col] = pd.to_datetime(df[col], errors="coerce")
                 datetime_cols = [col]
                 break
 
-    if datetime_cols:  # ✅ Correct check again
+    if datetime_cols:
         date_col = datetime_cols[0]
         numeric = df.select_dtypes(include="number")
         df_sorted = df.dropna(subset=[date_col]).sort_values(date_col)
@@ -107,11 +107,19 @@ def plot_timeseries(df):
             save_and_send(fig, f"⏳ Time Series Plot: `{num_col}` vs `{date_col}`", f"ts_{num_col}")
 
 def ai_summary(df):
-    """Generate AI summary using Cohere."""
+    """Generate an AI summary using the Cohere Chat API."""
     sample = df.head(15).to_string(index=False)
-    prompt = f"You are a data analyst. Analyze this dataset and summarize insights:\n\n{sample}"
-    res = co.generate(prompt=prompt, model="command-r-plus", max_tokens=300)
-    return res.generations[0].text
+    prompt = (
+        "You are a data analyst. Analyze this dataset sample and summarize "
+        "the key insights in a few short bullet points:\n\n" + sample
+    )
+    res = co.chat(
+        model="command-a-03-2025",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=300,
+        temperature=0.3,
+    )
+    return res.message.content[0].text
 
 # --- Chainlit Events ---
 @cl.on_chat_start
